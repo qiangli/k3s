@@ -480,7 +480,17 @@ func get(ctx context.Context, envInfo *cmds.Agent, proxy proxy.Proxy) (*config.N
 	servingKubeletKey := filepath.Join(envInfo.DataDir, "agent", "serving-kubelet.key")
 
 	nodePasswordRoot := "/"
-	if envInfo.Rootless {
+	// Embedded-cloudbox fork patch: also remap when running as a
+	// non-root euid. The upstream behavior mkdir's
+	// /etc/rancher/node, which fails on PaaS runtimes (DO App
+	// Platform, Heroku-style buildpacks) that run the container as
+	// a non-root user with a read-only /etc layer. With this guard
+	// the RunStandalone agent-bootstrap path (the one --disable-
+	// agent still triggers) can complete without sudo and the
+	// apiserver actually binds its HTTPS+1 port. Matches the
+	// existing Rootless branch — both want a writable
+	// data-dir-relative location.
+	if envInfo.Rootless || os.Geteuid() != 0 {
 		nodePasswordRoot = filepath.Join(envInfo.DataDir, "agent")
 	}
 	nodeConfigPath := filepath.Join(nodePasswordRoot, "etc", "rancher", "node")

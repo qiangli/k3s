@@ -369,7 +369,22 @@ func etcdGetter(control *config.Control) addressGetter {
 
 // getAddressCollector returns a function that can be called to return
 // apiserver addresses from both kubernetes and etcd
+//
+// Cloudbox patch: when the K3S_APISERVER_ADVERTISE env var is set, the
+// supervisor returns exactly that one address to every joining agent
+// instead of whatever kube-apiserver wrote into the kubernetes Service
+// EndpointSlice. Required because cloudbox's outposts reach the
+// apiserver through a per-outpost loopback STCP visitor — every agent
+// dials 127.0.0.1:6443 locally — but kube-apiserver auto-detects the
+// container's mesh IP (e.g. DO App Platform 100.127.x.y) and tells
+// agents to dial THAT directly, bypassing the tunnel and timing out.
+// --advertise-address=127.0.0.1 on kube-apiserver doesn't help because
+// it falls back to a non-loopback IP for the Endpoints object.
 func getAddressCollector(control *config.Control) func(ctx context.Context) []string {
+	if override := strings.TrimSpace(os.Getenv("K3S_APISERVER_ADVERTISE")); override != "" {
+		fixed := []string{override}
+		return func(ctx context.Context) []string { return fixed }
+	}
 	getFromKubernetes := kubernetesGetter(control)
 	getFromEtcd := etcdGetter(control)
 
